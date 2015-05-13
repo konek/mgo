@@ -19,6 +19,9 @@ type Database struct {
 	*mgo.Database
 }
 
+// M ...
+type M map[string]interface{}
+
 // ENotFound ...
 type ENotFound struct{}
 
@@ -216,4 +219,11 @@ func CheckID(id string) bool {
 		return false
 	}
 	return true
+}
+
+// Regex ...
+func Regex(regex string) map[string]interface{} {
+	return M{
+		"$regex": regex,
+	}
 }
