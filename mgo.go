@@ -2,8 +2,10 @@ package mgo
 
 import (
 	"container/list"
+	"errors"
 
 	"gopkg.in/mgo.v2"
+	"gopkg.in/mgo.v2/bson"
 )
 
 // DbQueueFn ...
@@ -99,6 +101,60 @@ func (q *DbQueue) Find(collection string, ret interface{}, query interface{}) er
 	return err
 }
 
+// Insert ...
+func (q *DbQueue) Insert(collection string, data interface{}) error {
+	return q.Push(func(db *Database, ec chan error) {
+		ec <- db.C(collection).Insert(data)
+	})
+}
+
+// UpdateID ...
+func (q *DbQueue) UpdateID(collection string, id interface{}, data interface{}) error {
+	return q.Push(func(db *Database, ec chan error) {
+		ec <- db.C(collection).UpdateId(id, data)
+	})
+}
+
+// UpdateSet ...
+func (q *DbQueue) UpdateSet(collection string, id interface{}, field string, data interface{}) error {
+	return q.Push(func(db *Database, ec chan error) {
+		ec <- db.C(collection).UpdateId(id, bson.M{
+			"$set": bson.M{
+				field: data,
+			},
+		})
+	})
+}
+
+// UpdateAdd ...
+func (q *DbQueue) UpdateAdd(collection string, id interface{}, field string, data interface{}) error {
+	return q.Push(func(db *Database, ec chan error) {
+		ec <- db.C(collection).UpdateId(id, bson.M{
+			"$addToSet": bson.M{
+				field: data,
+			},
+		})
+	})
+}
+
+// UpdateRemove ...
+func (q *DbQueue) UpdateRemove(collection string, id interface{}, field string, data interface{}) error {
+	return q.Push(func(db *Database, ec chan error) {
+		ec <- db.C(collection).UpdateId(id, bson.M{
+			"$pull": bson.M{
+				field: data,
+			},
+		})
+	})
+}
+
+// Update ...
+func (q *DbQueue) Update(collection string, data interface{}, query interface{}) error {
+	return q.Push(func(db *Database, ec chan error) {
+		ec <- db.C(collection).Update(query, data)
+	})
+}
+
 // RunDb ...
 func (q *DbQueue) RunDb(db *Database) {
 	for {
@@ -135,4 +191,29 @@ func (q *DbQueue) Ref(collection string, id interface{}) mgo.DBRef {
 		Collection: collection,
 		Id:         id,
 	}
+}
+
+// MakeID ...
+func MakeID(id string) (bson.ObjectId, error) {
+	if CheckID(id) == false {
+		return "", errors.New("invalid id")
+	}
+	return bson.ObjectIdHex(id), nil
+}
+
+// CheckID ...
+func CheckID(id string) bool {
+	if len(id) != 24 {
+		return false
+	}
+	for i := 0; i < len(id); i++ {
+		if id[i] >= 'a' && id[i] <= 'f' {
+			continue
+		}
+		if id[i] >= '0' && id[i] <= '9' {
+			continue
+		}
+		return false
+	}
+	return true
 }
