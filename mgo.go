@@ -48,7 +48,7 @@ func (u *UpdateReq) Do(collection string, id interface{}, q *DbQueue) error {
 	return q.UpdateID(collection, id, u.M)
 }
 
-func (u UpdateReq) Set(field string, data interface{}) {
+func (u *UpdateReq) Set(field string, data interface{}) {
 	if u.M == nil {
 		u.M = M{}
 	}
@@ -61,7 +61,7 @@ func (u UpdateReq) Set(field string, data interface{}) {
 	}
 }
 
-func (u UpdateReq) Add(field string, data interface{}) {
+func (u *UpdateReq) Add(field string, data interface{}) {
 	if u.M == nil {
 		u.M = M{}
 	}
@@ -74,7 +74,7 @@ func (u UpdateReq) Add(field string, data interface{}) {
 	}
 }
 
-func (u UpdateReq) Remove(field string, data interface{}) {
+func (u *UpdateReq) Remove(field string, data interface{}) {
 	if u.M == nil {
 		u.M = M{}
 	}
@@ -87,11 +87,11 @@ func (u UpdateReq) Remove(field string, data interface{}) {
 	}
 }
 
-func (u UpdateReq) SetUpdated() {
+func (u *UpdateReq) SetUpdated() {
 	u.Set("time.updated", time.Now())
 }
 
-func (u UpdateReq) SetEnded() {
+func (u *UpdateReq) SetEnded() {
 	u.Set("time.ended", time.Now())
 }
 
