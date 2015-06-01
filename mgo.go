@@ -3,6 +3,7 @@ package mgo
 import (
 	"container/list"
 	"errors"
+	"time"
 
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
@@ -19,8 +20,80 @@ type Database struct {
 	*mgo.Database
 }
 
+// Ref ...
+type Ref struct {
+	Collection string
+	ID         bson.ObjectId
+}
+
+// MakeRef
+func MakeRef(c string, id bson.ObjectId) Ref {
+	return Ref{
+		Collection: c,
+		ID:         id,
+	}
+}
+
 // M ...
 type M map[string]interface{}
+
+// UpdateReq ...
+type UpdateReq struct {
+	M
+	Prefix string
+}
+
+// Do ...
+func (u *UpdateReq) Do(collection string, id interface{}, q *DbQueue) error {
+	return q.UpdateID(collection, id, u.M)
+}
+
+func (u UpdateReq) Set(field string, data interface{}) {
+	if u.M == nil {
+		u.M = M{}
+	}
+	if set, ok := u.M["$set"].(M); ok == true {
+		set[u.Prefix+field] = data
+	} else {
+		u.M["$set"] = M{
+			u.Prefix + field: data,
+		}
+	}
+}
+
+func (u UpdateReq) Add(field string, data interface{}) {
+	if u.M == nil {
+		u.M = M{}
+	}
+	if add, ok := u.M["$addToSet"].(M); ok == true {
+		add[u.Prefix+field] = data
+	} else {
+		u.M["$addToSet"] = M{
+			u.Prefix + field: data,
+		}
+	}
+}
+
+func (u UpdateReq) Remove(field string, data interface{}) {
+	if u.M == nil {
+		u.M = M{}
+	}
+	if remove, ok := u.M["$pull"].(M); ok == true {
+		remove[u.Prefix+field] = data
+	} else {
+		u.M["$pull"] = M{
+			u.Prefix + field: data,
+		}
+	}
+}
+
+func (u UpdateReq) SetUpdated() {
+	u.Set("time.updated", time.Now())
+}
+
+func (u UpdateReq) SetEnded() {
+	u.Set("time.ended", time.Now())
+}
 
 // ENotFound ...
 type ENotFound struct{}
@@ -32,8 +105,9 @@ func (e ENotFound) Error() string {
 
 // DbQueue ...
 type DbQueue struct {
-	queue chan DbQueueFn2
-	dbs   *list.List
+	Migrations map[string]Migrations
+	queue      chan DbQueueFn2
+	dbs        *list.List
 }
 
 // NewDbQueue ...
@@ -71,6 +145,7 @@ func (q *DbQueue) Count(collection string, query interface{}) (int, error) {
 // FindOne ...
 func (q *DbQueue) FindOne(collection string, ret interface{}, query interface{}) error {
 	err := q.Push(func(db *Database, ec chan error) {
+		var tmp M
 		query := db.C(collection).Find(query)
 		n, e := query.Count()
 		if e != nil {
@@ -81,7 +156,13 @@ func (q *DbQueue) FindOne(collection string, ret interface{}, query interface{})
 			ec <- ENotFound{}
 			return
 		}
-		ec <- query.One(ret)
+		e = query.One(&tmp)
+		if e != nil {
+			ec <- e
+			return
+		}
+		Migrate(collection, tmp, q.Migrations)
+		ec <- FillStruct(tmp, ret)
 	})
 	return err
 }
@@ -89,6 +170,7 @@ func (q *DbQueue) FindOne(collection string, ret interface{}, query interface{})
 // Find ...
 func (q *DbQueue) Find(collection string, ret interface{}, query interface{}) error {
 	err := q.Push(func(db *Database, ec chan error) {
+		var tmp []M
 		query := db.C(collection).Find(query)
 		n, e := query.Count()
 		if e != nil {
@@ -99,7 +181,15 @@ func (q *DbQueue) Find(collection string, ret interface{}, query interface{}) er
 			ec <- ENotFound{}
 			return
 		}
-		ec <- query.All(ret)
+		e = query.All(&tmp)
+		if e != nil {
+			ec <- e
+			return
+		}
+		for _, t := range tmp {
+			Migrate(collection, t, q.Migrations)
+		}
+		ec <- FillStruct(tmp, ret)
 	})
 	return err
 }
