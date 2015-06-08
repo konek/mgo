@@ -45,14 +45,10 @@ type UpdateReq struct {
 
 // Do ...
 func (u *UpdateReq) Do(collection string, id interface{}, q *DbQueue) error {
-	err := q.MigrateId(collection, id)
-	if err != nil {
-		return err
-	}
 	return q.UpdateID(collection, id, u.M)
 }
 
-func (u *UpdateReq) Set(field string, data interface{}) {
+func (u UpdateReq) Set(field string, data interface{}) {
 	if u.M == nil {
 		u.M = M{}
 	}
@@ -65,7 +61,7 @@ func (u *UpdateReq) Set(field string, data interface{}) {
 	}
 }
 
-func (u *UpdateReq) Add(field string, data interface{}) {
+func (u UpdateReq) Add(field string, data interface{}) {
 	if u.M == nil {
 		u.M = M{}
 	}
@@ -78,7 +74,7 @@ func (u *UpdateReq) Add(field string, data interface{}) {
 	}
 }
 
-func (u *UpdateReq) Remove(field string, data interface{}) {
+func (u UpdateReq) Remove(field string, data interface{}) {
 	if u.M == nil {
 		u.M = M{}
 	}
@@ -91,11 +87,11 @@ func (u *UpdateReq) Remove(field string, data interface{}) {
 	}
 }
 
-func (u *UpdateReq) SetUpdated() {
+func (u UpdateReq) SetUpdated() {
 	u.Set("time.updated", time.Now())
 }
 
-func (u *UpdateReq) SetEnded() {
+func (u UpdateReq) SetEnded() {
 	u.Set("time.ended", time.Now())
 }
 
@@ -146,6 +142,18 @@ func (q *DbQueue) Count(collection string, query interface{}) (int, error) {
 	return n, err
 }
 
+// CountID ...
+func (q *DbQueue) CountID(collection string, id interface{}) (int, error) {
+	var n int
+	err := q.Push(func(db *Database, ec chan error) {
+		var e error
+		query := db.C(collection).FindId(id)
+		n, e = query.Count()
+		ec <- e
+	})
+	return n, err
+}
+
 // FindOne ...
 func (q *DbQueue) FindOne(collection string, ret interface{}, query interface{}) error {
 	err := q.Push(func(db *Database, ec chan error) {
@@ -169,6 +177,11 @@ func (q *DbQueue) FindOne(collection string, ret interface{}, query interface{})
 		ec <- FillStruct(tmp, ret)
 	})
 	return err
+}
+
+// FindOneID ...
+func (q *DbQueue) FindOneID(collection string, ret interface{}, id interface{}) error {
+	return q.FindOne(collection, ret, M{"_id": id})
 }
 
 // Find ...
@@ -198,59 +211,24 @@ func (q *DbQueue) Find(collection string, ret interface{}, query interface{}) er
 	return err
 }
 
-func (q *DbQueue) Migrate(collection string, selector interface{}) error {
-	return q.Push(func (db *Database, ec chan error) {
-		var tmp M
-		query := db.C(collection).Find(selector)
-		n, e := query.Count()
-		if e != nil {
-			ec <- e
-			return
-		}
-		if n == 0 {
-			ec <- ENotFound{}
-			return
-		}
-		e = query.One(&tmp)
-		if e != nil {
-			ec <- e
-			return
-		}
-		Migrate(collection, tmp, q.Migrations)
-		e = db.C(collection).Update(selector, tmp)
-		ec <- e
-	})
-}
-
-func (q *DbQueue) MigrateId(collection string, id interface{}) error {
-	return q.Push(func (db *Database, ec chan error) {
-		var tmp M
-		query := db.C(collection).FindId(id)
-		n, e := query.Count()
-		if e != nil {
-			ec <- e
-			return
-		}
-		if n == 0 {
-			ec <- ENotFound{}
-			return
-		}
-		e = query.One(&tmp)
-		if e != nil {
-			ec <- e
-			return
-		}
-		Migrate(collection, tmp, q.Migrations)
-		e = db.C(collection).UpdateId(id, tmp)
-		ec <- e
-	})
-}
-
-
 // Insert ...
 func (q *DbQueue) Insert(collection string, data interface{}) error {
 	return q.Push(func(db *Database, ec chan error) {
 		ec <- db.C(collection).Insert(data)
+	})
+}
+
+// Remove ...
+func (q *DbQueue) Remove(collection string, query interface{}) error {
+	return q.Push(func(db *Database, ec chan error) {
+		ec <- db.C(collection).Remove(query)
+	})
+}
+
+// RemoveID ...
+func (q *DbQueue) RemoveID(collection string, id interface{}) error {
+	return q.Push(func(db *Database, ec chan error) {
+		ec <- db.C(collection).RemoveId(id)
 	})
 }
 
