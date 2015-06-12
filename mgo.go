@@ -22,8 +22,9 @@ type Database struct {
 
 // Ref ...
 type Ref struct {
-	Collection string
-	ID         bson.ObjectId
+	Collection string        `bson:"$ref" json:"$ref"`
+	ID         bson.ObjectId `bson:"$id" json:"$id"`
+	Database   string        `bson:"$db,omitempty" json:"$db,omitempty"`
 }
 
 // MakeRef
@@ -32,6 +33,14 @@ func MakeRef(c string, id bson.ObjectId) Ref {
 		Collection: c,
 		ID:         id,
 	}
+}
+
+func (r Ref) Get(ret interface{}, db *DbQueue) error {
+	return db.FindOneID(r.Collection, ret, r.ID)
+}
+
+func (r Ref) Valid() bool {
+	return r.ID.Valid()
 }
 
 // M ...
@@ -211,6 +220,15 @@ func (q *DbQueue) Find(collection string, ret interface{}, query interface{}) er
 	return err
 }
 
+// Distinct ...
+func (q *DbQueue) Distinct(collection string, ret interface{}, query interface{}, key string) error {
+	err := q.Push(func(db *Database, ec chan error) {
+		query := db.C(collection).Find(query)
+		ec <- query.Distinct(key, ret)
+	})
+	return err
+}
+
 // Insert ...
 func (q *DbQueue) Insert(collection string, data interface{}) error {
 	return q.Push(func(db *Database, ec chan error) {
@@ -222,6 +240,14 @@ func (q *DbQueue) Insert(collection string, data interface{}) error {
 func (q *DbQueue) Remove(collection string, query interface{}) error {
 	return q.Push(func(db *Database, ec chan error) {
 		ec <- db.C(collection).Remove(query)
+	})
+}
+
+// RemoveAll ...
+func (q *DbQueue) RemoveAll(collection string, query interface{}) error {
+	return q.Push(func(db *Database, ec chan error) {
+		_, err := db.C(collection).RemoveAll(query)
+		ec <- err
 	})
 }
 
