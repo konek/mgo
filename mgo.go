@@ -24,7 +24,7 @@ type Database struct {
 type Ref struct {
 	Collection string        `bson:"$ref" json:"$ref"`
 	ID         bson.ObjectId `bson:"$id" json:"$id"`
-	Database   string        `bson:"$db,omitempty" json:"$db,omitempty"`
+	Database   string        `bson:"$db" json:"$db"`
 }
 
 // MakeRef
@@ -182,7 +182,7 @@ func (q *DbQueue) FindOne(collection string, ret interface{}, query interface{})
 			ec <- e
 			return
 		}
-		Migrate(collection, tmp, q.Migrations)
+		Migrate(collection, tmp, q.Migrations, db)
 		ec <- FillStruct(tmp, ret)
 	})
 	return err
@@ -213,7 +213,7 @@ func (q *DbQueue) Find(collection string, ret interface{}, query interface{}) er
 			return
 		}
 		for _, t := range tmp {
-			Migrate(collection, t, q.Migrations)
+			Migrate(collection, t, q.Migrations, db)
 		}
 		ec <- FillStruct(tmp, ret)
 	})
